@@ -1,0 +1,35 @@
+{
+  "checklist": [
+    {"item": "Internal cost template approved by Finance", "owner": "Finance", "due": "2026-12-04", "status": "done", "source_refs": ["RAD:D-05", "H4"], "assumption": false, "assumption_reason": ""},
+    {"item": "Legal approval of contract fallback positions", "owner": "General counsel", "due": "2026-12-08", "status": "done", "source_refs": ["RAD:D-06", "H5"], "assumption": false, "assumption_reason": ""},
+    {"item": "State answers to written questions (Addendum 1), including Q3 on clock start", "owner": "Bid lead", "due": "2026-11-20", "status": "done", "source_refs": ["RAD:D-01", "Q1", "Q2", "Q3"], "assumption": true, "assumption_reason": "The RFP document already contains the Addendum 1 excerpt, although the procurement calendar posts it on Nov 20; confirm against the official addendum when issued."},
+    {"item": "Submit the five written questions drafted at stage 2", "owner": "Bid lead", "due": "2026-11-13", "status": "outstanding", "source_refs": ["RFP §4", "R-12", "R-03", "R-05", "R-11", "R-10"], "assumption": false, "assumption_reason": ""},
+    {"item": "Written release from Kansas for the 5 state-owned assets (otherwise use California's legacy application)", "owner": "Legal", "due": "2026-11-27", "status": "outstanding", "source_refs": ["RAD:D-02", "RAD:R-01", "KS-JM-01", "KS-JM-02", "KS-UI-01", "KS-UI-02", "KS-LG-01"], "assumption": false, "assumption_reason": ""},
+    {"item": "Security and privacy reviewer contracted", "owner": "Delivery manager", "due": "2026-12-01", "status": "outstanding", "source_refs": ["RAD:D-04", "RAD:R-07", "C-12"], "assumption": false, "assumption_reason": ""},
+    {"item": "Translation vendor quote for threshold languages beyond Spanish", "owner": "Finance", "due": "2026-12-01", "status": "outstanding", "source_refs": ["RAD:D-03", "RAD:R-10", "R-05", "C-11"], "assumption": false, "assumption_reason": ""},
+    {"item": "Holds placed on the 8 named staff for Feb-Jul 2027", "owner": "Delivery manager", "due": "2026-12-04", "status": "outstanding", "source_refs": ["RAD:A-07", "Planned Resources"], "assumption": false, "assumption_reason": ""},
+    {"item": "Proposal submitted, with reuse savings shown line by line", "owner": "Bid lead", "due": "2026-12-11", "status": "outstanding", "source_refs": ["RFP §4", "RAD:R-04", "PB-2026-03"], "assumption": false, "assumption_reason": ""},
+    {"item": "State notice of intent to award", "owner": "State", "due": "2027-01-15", "status": "outstanding", "source_refs": ["RAD:D-07", "RFP §4"], "assumption": false, "assumption_reason": ""},
+    {"item": "Contract negotiated on the H5 positions", "owner": "General counsel", "due": "2027-01-29", "status": "outstanding", "source_refs": ["H5", "RAD:R-09"], "assumption": true, "assumption_reason": "No negotiation date is set in the documents; Jan 29 leaves a few days before the planned Feb 1 start."},
+    {"item": "Vendor authorized signatory signs the contract", "owner": "Executive sponsor", "due": "2027-02-01", "status": "outstanding", "source_refs": ["RAD:D-08"], "assumption": true, "assumption_reason": "The documents do not name our authorized signatory."},
+    {"item": "State signatures and funding approval (contract execution)", "owner": "State", "due": "2027-02-01", "status": "outstanding", "source_refs": ["RAD:D-08", "RAD:R-05", "RFP §4"], "assumption": false, "assumption_reason": ""},
+    {"item": "State provides current application design files, flows and Spanish content (needed for the legacy fallback)", "owner": "State", "due": "2027-02-01", "status": "outstanding", "source_refs": ["RFP §1", "D1", "H5"], "assumption": false, "assumption_reason": ""}
+  ],
+  "clock_start": {"confirmed": true, "basis": "Addendum 1, Q3: the 6-month term starts at contract execution, not award. Planned execution is Feb 1, 2027, so delivery runs Feb-Jul 2027.", "source_refs": ["Q3", "RFP §4", "RAD:A-05"], "assumption": false, "assumption_reason": ""},
+  "outstanding_approvals": [
+    "Kansas written release for the 5 state-owned assets (Legal, Nov 27, 2026)",
+    "State notice of intent to award (Jan 15, 2027)",
+    "Contract signature by our authorized signatory (Feb 1, 2027)",
+    "State signatures and funding approval (Feb 1, 2027)"
+  ],
+  "open_questions": [
+    {"question": "Which state approvals sit between award and signature (department, oversight review, funding), and how long does each take?", "why_it_matters": "The documents give only the award and start dates; the chain in between decides whether Feb 1 holds.", "source_refs": ["RAD:D-08", "RAD:R-05", "RFP §4"]},
+    {"question": "Who is our authorized signatory for this contract?", "why_it_matters": "Needed to schedule the vendor signature before Feb 1.", "source_refs": ["RAD:D-08"]}
+  ],
+  "rad_impacts": [
+    {"item_id": "D-05", "action": "closes", "note": "Finance approved the cost template at checkpoint H4.", "source_refs": ["RAD:D-05"]},
+    {"item_id": "D-06", "action": "closes", "note": "Legal approved the fallback positions at checkpoint H5.", "source_refs": ["RAD:D-06"]},
+    {"item_id": "R-05", "action": "changes", "note": "With the clock confirmed to start at execution, approval delays move the start date but do not shorten delivery; keep weekly tracking of the award-to-signature chain.", "source_refs": ["RAD:R-05", "Q3"]},
+    {"item_id": "D-08", "action": "changes", "note": "Execution now has four outstanding approvals listed here, plus the state's legacy application files as a new input.", "source_refs": ["RAD:D-08"]}
+  ]
+}
