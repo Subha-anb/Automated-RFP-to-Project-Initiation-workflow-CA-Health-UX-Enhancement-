@@ -7,6 +7,9 @@ __pycache__/
 state/
 *.bak/
 
+# Local tool config
+.claude/
+
 # Office lock files
 ~$*
 

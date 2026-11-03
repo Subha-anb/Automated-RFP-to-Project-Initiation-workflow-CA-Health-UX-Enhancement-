@@ -17,8 +17,23 @@ Python 3.10 or later. From this folder:
 
 ```powershell
 python -m venv .venv
-.\.venv\Scripts\python -m pip install anthropic python-docx pydantic
+.\.venv\Scripts\python -m pip install -r requirements.txt
 ```
+
+## Web UI
+
+```powershell
+.\.venv\Scripts\python -m streamlit run app.py
+```
+
+Opens at http://localhost:8501. In the sidebar, pick the agent mode and, for Claude API mode, paste your Anthropic API key. The key is held only in that browser session's memory and passed to each agent call; it is never written to disk, the run database or the audit log.
+
+- **Checkpoints:** one page per stage with the automatic checks, agent output as tables, open questions and risk-tracker impacts. Approve as each listed approver, return with a comment, reopen an approved stage, or retry a failed one. In File mode you can read the stage's prompt and upload the agent's JSON output.
+- **Evaluation:** all stage and cross-stage checks, plus the run's API cost (or estimate).
+- **Package and downloads:** export the initiation package and the sign-off checklist (Excel) once H6 is approved.
+- **Audit log:** every agent call and human decision for the run.
+
+The command line below does the same things.
 
 ## Choose how the agents run
 

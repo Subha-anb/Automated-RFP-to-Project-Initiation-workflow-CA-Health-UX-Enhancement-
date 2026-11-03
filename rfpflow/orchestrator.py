@@ -45,8 +45,11 @@ def approved_inputs(conn, run_id: int, stage: int) -> dict[int, str]:
     return inputs
 
 
-def execute(conn, docs: dict[str, SourceDoc], run_id: int, stage: int) -> None:
+def execute(conn, docs: dict[str, SourceDoc], run_id: int, stage: int,
+            mode: str | None = None, api_key: str | None = None) -> None:
+    """Run one stage's agent. `mode`/`api_key` come from the UI; the key is passed through, never stored."""
     row = store.get_stage(conn, run_id, stage)
+    mode = mode or agent_mode()
     if row["status"] in ("returned", "running") and row["messages_json"]:
         messages = json.loads(row["messages_json"])
     else:
@@ -57,9 +60,9 @@ def execute(conn, docs: dict[str, SourceDoc], run_id: int, stage: int) -> None:
     attempt = row["attempt"] if waiting else row["attempt"] + 1
 
     for try_no in (1, 2):  # one retry if the output does not validate
-        result = run_agent(stage, docs, messages, run_id=run_id, attempt=attempt)
+        result = run_agent(stage, docs, messages, run_id=run_id, attempt=attempt, mode=mode, api_key=api_key)
         store.audit("agent_call", run_id=run_id, stage=stage, agent=STAGES[stage].agent, model=MODEL,
-                    backend=agent_mode(), served_by=result.usage.get("served_by"), effort=STAGES[stage].effort,
+                    backend=mode, served_by=result.usage.get("served_by"), effort=STAGES[stage].effort,
                     attempt=attempt, try_no=try_no, usage=result.usage,
                     cost_usd=cost_usd(result.usage), error=result.error)
         if result.output is not None or not any(k in (result.error or "") for k in RETRYABLE):
@@ -83,7 +86,8 @@ def execute(conn, docs: dict[str, SourceDoc], run_id: int, stage: int) -> None:
                 due_at=due.isoformat(timespec="seconds"), error=result.error)
 
 
-def advance(conn, docs, run_id: int, retry_failed: bool = False) -> int | None:
+def advance(conn, docs, run_id: int, retry_failed: bool = False,
+            mode: str | None = None, api_key: str | None = None) -> int | None:
     """Run the next stage that needs running. Returns the stage now waiting at its gate, or None if done.
 
     With retry_failed, a stage sitting at its gate with no valid output (API error, refusal)
@@ -96,7 +100,7 @@ def advance(conn, docs, run_id: int, retry_failed: bool = False) -> int | None:
         if row["status"] in ("pending", "returned", "running") or (retry_failed and failed):
             if failed:
                 store.audit("stage_retried", run_id=run_id, stage=row["stage"], previous_error=row["error"])
-            execute(conn, docs, run_id, row["stage"])
+            execute(conn, docs, run_id, row["stage"], mode=mode, api_key=api_key)
         return row["stage"]
     return None
 

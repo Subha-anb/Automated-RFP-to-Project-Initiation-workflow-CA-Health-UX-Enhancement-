@@ -1,0 +1,5 @@
+anthropic>=2.3
+python-docx
+pydantic>=2
+openpyxl
+streamlit>=1.40

@@ -51,8 +51,10 @@ def agent_mode() -> str:
 
 
 def run_agent(stage: int, docs: dict[str, SourceDoc], messages: list[dict],
-              run_id: int = 0, attempt: int = 1) -> AgentResult:
-    mode = agent_mode()
+              run_id: int = 0, attempt: int = 1, mode: str | None = None,
+              api_key: str | None = None) -> AgentResult:
+    """`mode` overrides RFPFLOW_AGENT; `api_key` (from the UI) is used for this call only and never stored."""
+    mode = mode or agent_mode()
     if mode == "stub":
         return _stub(stage)
     if mode == "file":
@@ -61,7 +63,8 @@ def run_agent(stage: int, docs: dict[str, SourceDoc], messages: list[dict],
     import anthropic  # imported here: the package is slow to load and only API calls need it
 
     schema = SCHEMAS[stage]
-    client = anthropic.Anthropic()  # key from ANTHROPIC_API_KEY or the `ant auth login` profile
+    # Key from the caller, else ANTHROPIC_API_KEY or the `ant auth login` profile.
+    client = anthropic.Anthropic(api_key=api_key) if api_key else anthropic.Anthropic()
     try:
         with client.beta.messages.stream(
             model=MODEL,
