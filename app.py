@@ -13,6 +13,7 @@ import json
 import streamlit as st
 
 from rfpflow import orchestrator, store
+from rfpflow.agents import OLLAMA_HOST, OLLAMA_MODEL, ollama_models
 from rfpflow.checklist_xlsx import build as build_checklist
 from rfpflow.checks import check_stage
 from rfpflow.config import AUDIT_LOG, INBOX_DIR, STAGES
@@ -23,7 +24,8 @@ from rfpflow.render import render_stage
 
 st.set_page_config(page_title="RFP-to-Project Workflow", page_icon=":material/account_tree:", layout="wide")
 
-MODES = {"Claude API": "api", "File (no API key)": "file", "Placeholder (test)": "stub"}
+MODES = {"Claude API": "api", "Ollama (local, free)": "ollama", "File (no API key)": "file",
+         "Placeholder (test)": "stub"}
 STATUS_LABEL = {
     "approved": ":green[approved]",
     "awaiting_approval": ":orange[awaiting approval]",
@@ -54,9 +56,23 @@ with st.sidebar:
     st.caption("California health UX enhancement - six agents, six human checkpoints")
 
     mode = MODES[st.radio("Agent mode", list(MODES), key="mode_label",
-                          help="Claude API runs the real agents. File mode reads agent output you upload "
-                               "as JSON. Placeholder fills every stage with empty test output.")]
+                          help="Claude API runs the real agents (needs a key and credit). Ollama runs a free "
+                               "model on this computer. File mode reads agent output you upload as JSON. "
+                               "Placeholder fills every stage with empty test output.")]
     api_key = ""
+    model = None
+    if mode == "ollama":
+        installed = ollama_models()
+        if installed is None:
+            st.error(f"Ollama is not running at {OLLAMA_HOST}. Install it from ollama.com, start the "
+                     f"Ollama app, then run: ollama pull {OLLAMA_MODEL}")
+        elif not installed:
+            st.warning(f"Ollama is running but has no models. Run: ollama pull {OLLAMA_MODEL}")
+        else:
+            default = installed.index(OLLAMA_MODEL) if OLLAMA_MODEL in installed else 0
+            model = st.selectbox("Local model", installed, index=default, key="ollama_model")
+            st.caption("Runs on this computer at no cost. Each stage can take several minutes, and "
+                       "smaller models make more mistakes; the automatic checks catch many of them.")
     if mode == "api":
         api_key = st.text_input("Anthropic API key", type="password", key="api_key",
                                 placeholder="sk-ant-...",
@@ -85,10 +101,14 @@ with st.sidebar:
 def run_next(run_id: int, retry: bool = False) -> None:
     """Run the next stage that needs its agent, with the mode and key chosen in the sidebar."""
     if mode == "api" and not api_key:
-        st.error("Enter your Anthropic API key in the sidebar first, or switch to File mode.")
+        st.error("Enter your Anthropic API key in the sidebar first, or switch to Ollama or File mode.")
         st.stop()
-    with st.spinner("The agent is working. With the Claude API this can take a few minutes..."):
-        orchestrator.advance(conn, docs, run_id, retry_failed=retry, mode=mode, api_key=api_key or None)
+    if mode == "ollama" and not model:
+        st.error("Start Ollama and pull a model first (see the sidebar).")
+        st.stop()
+    with st.spinner("The agent is working. This can take a few minutes..."):
+        orchestrator.advance(conn, docs, run_id, retry_failed=retry, mode=mode,
+                             api_key=api_key or None, model=model)
     st.rerun()
 
 

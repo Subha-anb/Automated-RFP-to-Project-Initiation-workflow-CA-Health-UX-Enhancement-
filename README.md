@@ -1,6 +1,27 @@
 # RFP-to-Project Initiation Workflow (prototype)
 
-Six AI agents take a California health care RFP to a signed-off project initiation package. A named person approves each agent's output at a human checkpoint before the next stage runs. The sample data in `Data Sources/` is fictional.
+Six AI agents take a California health care RFP to a signed-off project initiation package, reusing a Kansas Health Care System UX design as the baseline. A named person approves each agent's output at a human checkpoint before the next stage runs. All sample data in `Data Sources/` is fictional.
+
+**Status (Nov 6, 2026):** working prototype.
+
+| What | Result |
+| --- | --- |
+| Run 1, all six stages (file mode, outputs written in a Claude Code chat) | Approved at all six checkpoints; 27/27 evaluation checks pass |
+| Claude API, stages 1-2 | Working; about $0.40 per stage |
+| Claude API, stages 3-6 | Not yet tested |
+| Ollama mode | Tested against a fake server only, never on a real local model |
+
+## Quick start
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python -m pip install -r requirements.txt
+.\.venv\Scripts\python -m streamlit run app.py
+```
+
+Open http://localhost:8501, choose **Claude API**, paste your key and click **Start new run**. To try it without a key, choose **Placeholder (test)**.
+
+## The six stages
 
 | Stage | Agent | Checkpoint | Approvers |
 | --- | --- | --- | --- |
@@ -11,22 +32,14 @@ Six AI agents take a California health care RFP to a signed-off project initiati
 | 5 | Contract | H5 Negotiation positions | Legal |
 | 6 | Sign-off tracker | H6 Contract sign-off | Executive sponsor, State |
 
-## Setup
+## Requirements
 
-Python 3.10 or later. From this folder:
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\python -m pip install -r requirements.txt
-```
+- Python 3.10 or later (built on 3.14)
+- For Claude API mode: an API key from the [Claude Console](https://console.anthropic.com) and prepaid credit under Settings > Billing. A Claude Pro, Max or Team subscription does not include API credit.
 
 ## Web UI
 
-```powershell
-.\.venv\Scripts\python -m streamlit run app.py
-```
-
-Opens at http://localhost:8501. In the sidebar, pick the agent mode and, for Claude API mode, paste your Anthropic API key. The key is held only in that browser session's memory and passed to each agent call; it is never written to disk, the run database or the audit log.
+In the sidebar, pick the agent mode and, for Claude API mode, paste your Anthropic API key. The key is held only in that browser session's memory and passed to each agent call; it is never written to disk, the run database or the audit log.
 
 - **Checkpoints:** one page per stage with the automatic checks, agent output as tables, open questions and risk-tracker impacts. Approve as each listed approver, return with a comment, reopen an approved stage, or retry a failed one. In File mode you can read the stage's prompt and upload the agent's JSON output.
 - **Evaluation:** all stage and cross-stage checks, plus the run's API cost (or estimate).
@@ -37,11 +50,12 @@ The command line below does the same things.
 
 ## Choose how the agents run
 
-Set `RFPFLOW_AGENT` in the terminal before running:
+The web UI has a sidebar choice for this. For the command line, set `RFPFLOW_AGENT` in the terminal before running:
 
 | Mode | Set | What it needs |
 | --- | --- | --- |
 | Claude API (default) | nothing, or `$env:RFPFLOW_AGENT = "api"` | `$env:ANTHROPIC_API_KEY = "..."` (or an `ant auth login` profile) and credit on the account |
+| Ollama (local, free) | `$env:RFPFLOW_AGENT = "ollama"` (model: `$env:RFPFLOW_OLLAMA_MODEL`, default `qwen2.5:7b`) | [Ollama](https://ollama.com) installed and running, and the model pulled: `ollama pull qwen2.5:7b`. Output is constrained to each stage's schema; smaller models are slower and less accurate than Claude, so review checkpoints closely |
 | File (no API key) | `$env:RFPFLOW_AGENT = "file"` | Each stage writes its prompt to `inbox/run-N/stage-K-attempt-A.prompt.md`; an agent (e.g. Claude in a Claude Code chat) writes the output as JSON to the matching `.json` file, then `run` loads it |
 | Placeholder | `$env:RFPFLOW_AGENT = "stub"` | Nothing; empty schema-valid outputs, for testing the flow |
 
@@ -71,16 +85,21 @@ Or step by step:
 - A stage passes its checkpoint only when every listed approver approves the current attempt.
 - **Return** re-runs that stage with the reviewer's comment appended to its conversation (earlier turns are never edited) and resets every later stage. An already-approved stage can be returned from a later checkpoint.
 - A stage that failed (API error, refusal, missing file output) sits at its checkpoint with the error shown; fix the cause and use `run` to retry it.
+- The approve command runs the next stage automatically, so set the API key in that terminal first.
 
 ## Where things live
 
 | Path | Contents |
 | --- | --- |
-| `rfpflow/` | The code: `loader.py` (data sources), `schemas.py` (agent outputs), `prompts.py`, `agents.py` (Claude calls), `orchestrator.py` (state machine), `checks.py` (automatic checks), `cli.py` (checkpoints), `export.py`, `evaluate.py`, `config.py` |
+| `app.py` | The Streamlit web UI |
+| `rfpflow/` | The code: `loader.py` (data sources), `schemas.py` (agent outputs), `prompts.py`, `agents.py` (agent backends), `orchestrator.py` (state machine), `checks.py` (automatic checks), `cli.py` (command line), `export.py`, `evaluate.py`, `checklist_xlsx.py` (Excel checklist), `config.py` |
+| `Data Sources/` | The six fictional sample documents |
+| `Proj Doc/` | Outcome Statement, Solution Design, Bottleneck Mapping |
 | `state/runs.db` | SQLite: each stage's status, output, checks, conversation, due time; every approval and return |
 | `state/audit.jsonl` | Append-only audit log: every agent call (model, effort, tokens, cost) and every human decision |
 | `output/run-N/stage-K.md` | Each checkpoint as readable Markdown |
 | `output/run-N/initiation-package.md` | The exported package |
+| `output/run-N/sign-off-checklist.xlsx` | The sign-off checklist |
 | `inbox/run-N/` | File mode only: prompts out, agent JSON in |
 
 ## Tuning
@@ -92,11 +111,19 @@ Per-agent reasoning effort, approvers and SLA hours are in `rfpflow/config.py` (
 - Model `claude-opus-5-5`, adaptive thinking, effort set explicitly per agent.
 - Structured output from the Pydantic schemas (`output_format`); invalid output is retried once, then shown at the checkpoint.
 - Server-side refusal fallback is on (`fallbacks="default"`, beta `server-side-fallback-2026-07-01`); a refusal that still comes back is shown at the checkpoint.
-- The shared rules plus all data sources form one cached system prompt reused by every stage and rerun; check `cache_read_input_tokens` in the audit log.
-- The API key is read from the environment or the `ant` profile, never from files.
+- The shared rules plus all data sources are sent as a cached system prompt. See Known limits: the cache is not yet being reused between stages.
+- The API key comes from the web UI, the environment or the `ant` profile, never from files. Keys typed into the UI are not stored.
+
+## Cost
+
+On Claude Opus 5.5 ($4 input, $20 output per million tokens), stage 1 cost $0.34 and stage 2 cost $0.46, each taking about 2.5 minutes. Expect roughly $3-$4 for a full six-stage run; this is a projection, since stages 3-6 have not run on the API. Real costs are in `state/audit.jsonl` and the Evaluation tab.
 
 ## Known limits
 
-- Effort, cost and quality have only been exercised in file mode; the first API run should be reviewed closely and its cost checked in `state/audit.jsonl`.
+- **Prompt cache not reused between stages:** stages 1 and 2 both show zero `cache_read_input_tokens`. The likely causes are the effort change between stages or the per-stage output schema; neither is confirmed.
 - The tracker updates (`rad_impacts`) are listed in the export but not written back to the tracker document.
-- Checkpoints are a CLI; a local web UI would be the next step for non-technical approvers.
+- The export is Markdown only.
+- The Excel checklist's formulas have not been checked in Excel or LibreOffice on this machine.
+- Compliance rule wording in the samples is simplified; have counsel confirm it before real use.
+- The web UI has no sign-in. Anyone who can reach it can approve as any role, so run it locally. Approver names are selected, not authenticated.
+- On free hosting such as Streamlit Community Cloud, storage resets on restart, so run history is lost.

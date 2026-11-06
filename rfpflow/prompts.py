@@ -1,5 +1,5 @@
 """Prompts. The shared system prompt (rules + all data sources) is identical for every agent,
-so one cache entry serves all six stages and every rerun. Stage-specific instructions go in
+intended so one cache entry serves all stages (see README, Known limits). Stage-specific instructions go in
 the user turn, after the cached prefix."""
 
 from __future__ import annotations

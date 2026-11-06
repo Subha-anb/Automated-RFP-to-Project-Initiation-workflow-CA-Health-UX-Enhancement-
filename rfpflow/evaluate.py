@@ -64,7 +64,14 @@ def run_cost(run_id: int, rows, docs) -> list[str]:
     actual = sum(c.get("cost_usd", 0) for c in calls)
     usage = {k: sum(c.get("usage", {}).get(k, 0) or 0 for c in calls)
              for k in ("input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens")}
+    local = [c for c in calls if c.get("backend") == "ollama"]
+    if local:
+        secs = sum(c.get("usage", {}).get("seconds", 0) or 0 for c in local)
+        tok = sum(c.get("usage", {}).get("local_output_tokens", 0) or 0 for c in local)
+        models = sorted({c.get("served_by") for c in local if c.get("served_by")})
     lines = [f"Agent calls logged: {len(calls)} (including failed and waiting calls)",
+             *([f"Local Ollama calls: {len(local)} on {', '.join(models)}; {tok:,} output tokens, "
+                f"{secs / 60:.1f} minutes; no API cost"] if local else []),
              f"API usage: {usage}",
              f"Actual API cost: ${actual:.4f}"]
     if actual == 0:
@@ -77,7 +84,7 @@ def run_cost(run_id: int, rows, docs) -> list[str]:
         # an allowance of 2x for adaptive thinking at high effort
         est = (system_tokens * PRICE_CACHE_WRITE + system_tokens * (attempts - 1) * PRICE_CACHE_READ
                + user_tokens * PRICE_INPUT + out_tokens * 3 * PRICE_OUTPUT) / 1e6
-        lines.append(f"Estimated API cost for this run (file backend, no API calls made): about ${est:.2f} "
+        lines.append(f"Estimated cost if this run used the Claude API (none was made): about ${est:.2f} "
                      f"({attempts} agent calls, ~{system_tokens:,} cached prompt tokens, ~{out_tokens:,} output "
                      "tokens plus thinking). Rough estimate from text size, not a measurement.")
     return lines

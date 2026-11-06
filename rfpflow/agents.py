@@ -2,6 +2,8 @@
 
 Agent backends, chosen with the RFPFLOW_AGENT environment variable:
   api  (default) - Claude API call with structured output.
+  ollama         - free, local model through Ollama (RFPFLOW_OLLAMA_MODEL, default qwen2.5:7b;
+                   OLLAMA_HOST, default http://localhost:11434). Output is constrained to the schema.
   file           - no API key: the stage's prompt is written to inbox/run-N/, and the output
                    is read from a JSON file written there by Claude in a Claude Code chat.
   stub           - schema-valid placeholder, for testing the orchestration (also RFPFLOW_STUB=1).
@@ -9,7 +11,11 @@ Agent backends, chosen with the RFPFLOW_AGENT environment variable:
 
 from __future__ import annotations
 
+import copy
+import json
 import os
+import urllib.error
+import urllib.request
 from dataclasses import dataclass, field
 
 from pydantic import BaseModel, ValidationError
@@ -52,11 +58,14 @@ def agent_mode() -> str:
 
 def run_agent(stage: int, docs: dict[str, SourceDoc], messages: list[dict],
               run_id: int = 0, attempt: int = 1, mode: str | None = None,
-              api_key: str | None = None) -> AgentResult:
-    """`mode` overrides RFPFLOW_AGENT; `api_key` (from the UI) is used for this call only and never stored."""
+              api_key: str | None = None, model: str | None = None) -> AgentResult:
+    """`mode` overrides RFPFLOW_AGENT; `api_key` (from the UI) is used for this call only and never stored.
+    `model` picks the Ollama model in ollama mode."""
     mode = mode or agent_mode()
     if mode == "stub":
         return _stub(stage)
+    if mode == "ollama":
+        return _ollama(stage, docs, messages, model or OLLAMA_MODEL)
     if mode == "file":
         return _from_file(stage, messages, run_id, attempt)
 
@@ -109,6 +118,82 @@ def run_agent(stage: int, docs: dict[str, SourceDoc], messages: list[dict],
     if parsed is None:
         return AgentResult(None, content, usage, error="No structured output returned.")
     return AgentResult(parsed.model_dump(mode="json"), content, usage)
+
+
+OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434").rstrip("/")
+OLLAMA_MODEL = os.environ.get("RFPFLOW_OLLAMA_MODEL", "qwen2.5:7b")
+OLLAMA_CTX = 32768  # the prompt (rules + all sources + approved outputs) needs far more than Ollama's default
+
+
+def ollama_models(host: str = OLLAMA_HOST) -> list[str] | None:
+    """Models pulled into the local Ollama, or None if Ollama is not reachable."""
+    try:
+        with urllib.request.urlopen(f"{host}/api/tags", timeout=3) as r:
+            return [m["name"] for m in json.load(r).get("models", [])]
+    except (urllib.error.URLError, OSError, ValueError):
+        return None
+
+
+def _inline_refs(schema: dict) -> dict:
+    """Inline Pydantic's $defs/$ref so the schema works as an Ollama `format` constraint."""
+    defs = schema.get("$defs", {})
+
+    def walk(node):
+        if isinstance(node, dict):
+            if "$ref" in node:
+                return walk(copy.deepcopy(defs[node["$ref"].split("/")[-1]]))
+            return {k: walk(v) for k, v in node.items() if k != "$defs"}
+        if isinstance(node, list):
+            return [walk(v) for v in node]
+        return node
+
+    return walk(schema)
+
+
+def _text_of(content) -> str:
+    if isinstance(content, str):
+        return content
+    return "\n\n".join(b.get("text", "") for b in content if b.get("type") == "text")
+
+
+def _ollama(stage: int, docs: dict[str, SourceDoc], messages: list[dict], model: str) -> AgentResult:
+    """Local model through Ollama's chat API, with output constrained to the stage schema."""
+    schema = SCHEMAS[stage]
+    system = (SHARED_RULES + sources_block(docs, list(SOURCES))
+              + "\n\nReply with a single JSON object that matches the required schema, and nothing else.")
+    body = {
+        "model": model,
+        "messages": [{"role": "system", "content": system}]
+                    + [{"role": m["role"], "content": _text_of(m["content"])} for m in messages],
+        "format": _inline_refs(schema.model_json_schema()),
+        "stream": False,
+        "options": {"num_ctx": OLLAMA_CTX, "temperature": 0},
+    }
+    usage = {"served_by": f"ollama:{model}"}
+    req = urllib.request.Request(f"{OLLAMA_HOST}/api/chat", data=json.dumps(body).encode("utf-8"),
+                                 headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=3600) as r:  # local models can take many minutes
+            data = json.load(r)
+    except urllib.error.HTTPError as e:
+        detail = e.read().decode("utf-8", "ignore")
+        if e.code == 404 or "not found" in detail:
+            return AgentResult(None, usage=usage, error=f"Ollama model '{model}' is not installed. Run: ollama pull {model}")
+        return AgentResult(None, usage=usage, error=f"Ollama error {e.code}: {detail[:300]}")
+    except (urllib.error.URLError, OSError) as e:
+        return AgentResult(None, usage=usage, error=f"Ollama is not running at {OLLAMA_HOST} ({e}). "
+                                                     "Install it from ollama.com and start the Ollama app.")
+    usage.update(local_input_tokens=data.get("prompt_eval_count", 0),
+                 local_output_tokens=data.get("eval_count", 0),
+                 seconds=round(data.get("total_duration", 0) / 1e9, 1))
+    content = data.get("message", {}).get("content", "")
+    if data.get("done_reason") == "length":
+        return AgentResult(None, usage=usage, error="Output hit max_tokens before finishing (Ollama stopped at its length limit).")
+    try:
+        parsed = schema.model_validate_json(content)
+    except ValidationError as e:
+        return AgentResult(None, usage=usage, error=f"Output failed schema validation: {e}")
+    return AgentResult(parsed.model_dump(mode="json"), [{"type": "text", "text": content}], usage)
 
 
 def _from_file(stage: int, messages: list[dict], run_id: int, attempt: int) -> AgentResult:
