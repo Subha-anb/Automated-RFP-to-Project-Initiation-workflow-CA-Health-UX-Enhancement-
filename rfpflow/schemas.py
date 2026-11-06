@@ -205,3 +205,12 @@ SCHEMAS: dict[int, type[StageCommon]] = {
     5: ContractOutput,
     6: SignoffOutput,
 }
+
+
+class StageEnvelope(BaseModel):
+    """The one output format sent to the API for every stage.
+
+    The output schema is part of the cached prompt, so a different schema per stage means no
+    cache reuse between stages. The agent fills `stage_output` with its own stage's format."""
+
+    stage_output: IntakeOutput | RequirementsOutput | ReuseOutput | PlanOutput | ContractOutput | SignoffOutput

@@ -38,10 +38,10 @@ def cross_stage(out: dict[int, dict], docs) -> list[Check]:
                             f"missing: {sorted(traced - mapped) or 'none'}"))
     if 3 in out and 5 in out:
         state_owned = set(out[3]["ip_clearance_request"]["state_owned_assets"])
-        ip = next((c for c in out[5]["clause_positions"] if c["clause"].startswith("Pre-existing IP")), None)
+        cited = {ref for c in out[5]["clause_positions"] if c["clause"].startswith("Pre-existing IP")
+                 for ref in c["source_refs"]}  # the clause may be split in two
         checks.append(Check("Contract pre-existing IP clause covers the state-owned Kansas assets",
-                            bool(ip and state_owned <= set(ip["source_refs"])),
-                            f"{len(state_owned & set(ip['source_refs'])) if ip else 0}/{len(state_owned)} cited"))
+                            state_owned <= cited, f"{len(state_owned & cited)}/{len(state_owned)} cited"))
     if 4 in out:
         deliverables = next(t for t in docs["rfp"].tables if "Payment" in t[0])  # RFP has two "ID" tables
         rfp_pct = {row[0]: float(row[t_col].rstrip("%")) for t in [deliverables]

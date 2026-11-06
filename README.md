@@ -7,8 +7,7 @@ Six AI agents take a California health care RFP to a signed-off project initiati
 | What | Result |
 | --- | --- |
 | Run 1, all six stages (file mode, outputs written in a Claude Code chat) | Approved at all six checkpoints; 27/27 evaluation checks pass |
-| Claude API, stages 1-2 | Working; about $0.40 per stage |
-| Claude API, stages 3-6 | Not yet tested |
+| Run 3, all six stages on the Claude API | Approved at all six checkpoints; $3.35; 26/27 checks pass (one real miss: two dates with no source) |
 | Ollama mode | Tested against a fake server only, never on a real local model |
 
 ## Quick start
@@ -111,16 +110,29 @@ Per-agent reasoning effort, approvers and SLA hours are in `rfpflow/config.py` (
 - Model `claude-opus-5-5`, adaptive thinking, effort set explicitly per agent.
 - Structured output from the Pydantic schemas (`output_format`); invalid output is retried once, then shown at the checkpoint.
 - Server-side refusal fallback is on (`fallbacks="default"`, beta `server-side-fallback-2026-07-01`); a refusal that still comes back is shown at the checkpoint.
-- The shared rules plus all data sources are sent as a cached system prompt. See Known limits: the cache is not yet being reused between stages.
+- Every stage sends the same combined output format (`StageEnvelope`) and the same system prompt (shared rules plus all data sources), so the prompt cache can be reused across stages. If the API rejects the combined schema, that stage falls back to its own schema. See Known limits.
 - The API key comes from the web UI, the environment or the `ant` profile, never from files. Keys typed into the UI are not stored.
 
 ## Cost
 
-On Claude Opus 5.5 ($4 input, $20 output per million tokens), stage 1 cost $0.34 and stage 2 cost $0.46, each taking about 2.5 minutes. Expect roughly $3-$4 for a full six-stage run; this is a projection, since stages 3-6 have not run on the API. Real costs are in `state/audit.jsonl` and the Evaluation tab.
+Run 3 on Claude Opus 5.5 ($4 input, $20 output per million tokens) cost **$3.35** and took about 20 minutes of agent time, including one return:
+
+| Stage | Effort | Cost (USD) |
+| --- | --- | --- |
+| 1 RFP intake | medium | 0.34 |
+| 2 Requirements (plus one return, 0.38) | high | 0.46 + 0.38 |
+| 3 Kansas reuse | high | 0.43 |
+| 4 Plan and cost | high | 0.64 |
+| 5 Contract | high | 0.72 |
+| 6 Sign-off tracker | low | 0.38 |
+
+Output tokens were $2.15 of that, and cache writes $1.20. Real costs are in `state/audit.jsonl` and the Evaluation tab. To cut cost, lower effort per stage in `rfpflow/config.py`: output tokens are the main driver.
 
 ## Known limits
 
-- **Prompt cache not reused between stages:** stages 1 and 2 both show zero `cache_read_input_tokens`. The likely causes are the effort change between stages or the per-stage output schema; neither is confirmed.
+- **Prompt cache across stages is unconfirmed:** run 3 read nothing from the cache between stages, which pointed to the per-stage output schema, so every stage now sends one combined format. That change passes offline tests but has not yet run on the API. Check `cache_read_input_tokens` in the audit log on the next run. Stages at a different effort may still miss the cache.
+- **Cache savings are limited:** the cache lasts 5 minutes, so a checkpoint reviewed more slowly than that gets no reuse, and at best the saving is about $0.40 a run. Returns within 5 minutes do reuse it.
+- **Agents don't remember decisions between runs:** a reviewer's comment applies to that run only. Standing positions belong in the data sources, such as the contract playbook. Run 1's decision to fall back to California's existing application is not in the playbook, so run 3 escalated that clause.
 - The tracker updates (`rad_impacts`) are listed in the export but not written back to the tracker document.
 - The export is Markdown only.
 - The Excel checklist's formulas have not been checked in Excel or LibreOffice on this machine.

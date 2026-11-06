@@ -1,14 +1,16 @@
 """Prompts. The shared system prompt (rules + all data sources) is identical for every agent,
-intended so one cache entry serves all stages (see README, Known limits). Stage-specific instructions go in
+intended so one cache entry serves all stages. Stage-specific instructions go in
 the user turn, after the cached prefix."""
 
 from __future__ import annotations
+
+from .schemas import SCHEMAS
 
 SHARED_RULES = """\
 You are one agent in a code-orchestrated workflow that takes a California state health care RFP to an approved project initiation package. We are a UX vendor reusing our Kansas Health Care System design as the baseline for a California UX enhancement. Six agents run in sequence; after each one, a named person reviews your output at a human checkpoint and either approves it or returns it with a comment. Write for that reviewer: specific, concise, decision-ready.
 
 Ground every item in the documents below.
-- Put the IDs an item is based on in `source_refs`, exactly as they appear in the documents (R-05, KS-LG-01, C-11, EMP-140, PB-2023-10, D1, Q2 ...).
+- Put the IDs an item is based on in `source_refs`, exactly as they appear in the documents (R-05, KS-LG-01, C-11, EMP-140, PB-2023-10, D1, Q2 ...). Where a fact has no ID, cite its section, such as "RFP §4". Never leave `source_refs` empty unless `assumption` is true.
 - The risk tracker's IDs collide with RFP requirement IDs, so in `source_refs` write tracker items with a prefix: RAD:R-01, RAD:A-05, RAD:D-02. In `rad_impacts.item_id` use the bare tracker ID (R-01, A-05, D-02) or NEW.
 - If the documents do not support an item, set `assumption` to true and say why in `assumption_reason`, or raise it in `open_questions`. Never invent figures, dates, assets, staff, rates or clauses.
 - Use `rad_impacts` for every tracker risk, assumption or dependency your output raises, changes or closes, and for new ones (item_id NEW).
@@ -56,7 +58,7 @@ def stage_user_message(stage: int, approved_inputs: dict[int, str]) -> str:
     parts = [STAGE_TASKS[stage]]
     for n, payload in sorted(approved_inputs.items()):
         parts.append(f'<approved_output stage="{n}">\n{payload}\n</approved_output>')
-    parts.append("Return the complete output for this stage.")
+    parts.append(f"Return the complete output for this stage, in the {SCHEMAS[stage].__name__} format.")
     return "\n\n".join(parts)
 
 

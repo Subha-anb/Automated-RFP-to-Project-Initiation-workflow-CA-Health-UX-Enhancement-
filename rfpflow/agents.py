@@ -24,7 +24,7 @@ from .config import (FALLBACK_BETA, INBOX_DIR, MAX_TOKENS, MODEL, PRICE_CACHE_RE
                      PRICE_INPUT, PRICE_OUTPUT, STAGES)
 from .loader import SOURCES, SourceDoc, sources_block
 from .prompts import SHARED_RULES
-from .schemas import SCHEMAS
+from .schemas import SCHEMAS, StageEnvelope
 
 
 @dataclass
@@ -74,7 +74,8 @@ def run_agent(stage: int, docs: dict[str, SourceDoc], messages: list[dict],
     schema = SCHEMAS[stage]
     # Key from the caller, else ANTHROPIC_API_KEY or the `ant auth login` profile.
     client = anthropic.Anthropic(api_key=api_key) if api_key else anthropic.Anthropic()
-    try:
+
+    def call(output_format):
         with client.beta.messages.stream(
             model=MODEL,
             max_tokens=MAX_TOKENS,
@@ -82,12 +83,20 @@ def run_agent(stage: int, docs: dict[str, SourceDoc], messages: list[dict],
             messages=messages,
             thinking={"type": "adaptive"},
             output_config={"effort": STAGES[stage].effort},
-            output_format=schema,
+            output_format=output_format,
             cache_control={"type": "ephemeral"},  # also cache the growing conversation for reruns
             betas=[FALLBACK_BETA],
             fallbacks="default",
         ) as stream:
-            msg = stream.get_final_message()
+            return stream.get_final_message()
+
+    try:
+        try:
+            msg = call(StageEnvelope)  # the same format every stage, so the prompt cache can be reused
+        except anthropic.BadRequestError as e:
+            if "schema" not in str(e.message).lower():
+                raise
+            msg = call(schema)  # the API rejected the combined schema: still run, without cache reuse
     except anthropic.APIConnectionError as e:
         return AgentResult(None, error=f"Connection error: {e}")
     except anthropic.RateLimitError as e:
@@ -117,6 +126,11 @@ def run_agent(stage: int, docs: dict[str, SourceDoc], messages: list[dict],
     parsed: BaseModel | None = msg.parsed_output
     if parsed is None:
         return AgentResult(None, content, usage, error="No structured output returned.")
+    if isinstance(parsed, StageEnvelope):
+        parsed = parsed.stage_output
+    if not isinstance(parsed, schema):
+        return AgentResult(None, content, usage, error=f"Output failed schema validation: expected "
+                                                       f"{schema.__name__}, got {type(parsed).__name__}.")
     return AgentResult(parsed.model_dump(mode="json"), content, usage)
 
 

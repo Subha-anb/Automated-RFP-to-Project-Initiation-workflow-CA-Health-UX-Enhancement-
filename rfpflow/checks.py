@@ -123,9 +123,10 @@ def _stage4(out, docs):
 
 def _stage5(out, docs):
     clauses = {r["Clause"] for r in docs["contracts"].table_with_header("Clause")}
-    got = {c["clause"] for c in out.get("clause_positions", [])}
-    return [Check("Every playbook clause has a position", clauses <= got,
-                  f"missing: {sorted(clauses - got) or 'none'}")]
+    got = [c["clause"] for c in out.get("clause_positions", [])]
+    # An agent may split a clause in two, e.g. "Pre-existing IP (Kansas assets): 8 vendor-owned assets".
+    missing = sorted(c for c in clauses if not any(g.startswith(c) for g in got))
+    return [Check("Every playbook clause has a position", not missing, f"missing: {missing or 'none'}")]
 
 
 def _stage6(out, docs):
